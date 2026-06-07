@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 YouTube Music Downloader - Perfect Match (Clean Audio, 1:1 Cover & Reporting)
+with ytmusicapi Integration for accurate Track IDs
 """
 
 import os
@@ -15,6 +16,14 @@ from typing import List, Dict, Tuple, Optional
 from yt_dlp import YoutubeDL
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3, APIC, error as ID3Error
+
+# Validasi Library ytmusicapi
+try:
+    from ytmusicapi import YTMusic
+except ImportError:
+    print("Error: Library 'ytmusicapi' tidak ditemukan!")
+    print("Silakan install terlebih dahulu menggunakan perintah: pip install ytmusicapi")
+    sys.exit(1)
 
 try:
     from PIL import Image
@@ -140,12 +149,11 @@ def download_hook(d):
             percent = d['downloaded_bytes'] / total * 100
             print(f"\rDownloading… {percent:5.1f}% ", end='', flush=True)
     elif d['status'] == 'finished':
-        print("\rDownload completed.               ")
+        print("\rDownload completed.                ")
 
 
 def clean_track_title(title: str) -> str:
     """Membersihkan judul dari embel-embel seperti 1080p, Official Video, dll."""
-    # Hapus teks dalam kurung siku atau kurung biasa yang mengandung kata-kata tidak penting
     cleaned = re.sub(r'(?i)[\(\[].*?(official|music video|lyric|1080p|full hd|hq|audio|video|live).*?[\)\]]', '', title)
     return " ".join(cleaned.split())
 
@@ -166,7 +174,7 @@ def process_entry(url: str, base_dir: Path, output_format: str, bitrate: Optiona
                 with YoutubeDL(search_opts) as ydl_s:
                     search_res = ydl_s.extract_info(f"ytsearch1:{fallback_title} audio", download=False)
                     if search_res and search_res.get('entries'):
-                        new_url = f"https://www.youtube.com/watch?v={search_res['entries'][0]['id']}"
+                        new_url = f"https://music.youtube.com/watch?v={search_res['entries'][0]['id']}"
                         info = ydl.extract_info(new_url, download=False)
                         url = new_url
             except Exception:
@@ -176,7 +184,6 @@ def process_entry(url: str, base_dir: Path, output_format: str, bitrate: Optiona
             return False
 
         # --- PERBAIKAN JUDUL (MENGUTAMAKAN METADATA YT MUSIC) ---
-        # yt music biasanya menyimpan nama asli di variabel 'track'
         raw_title = info.get('track') or info.get('title', 'unknown')
         title = clean_track_title(raw_title)
         
@@ -250,20 +257,39 @@ def process_entry(url: str, base_dir: Path, output_format: str, bitrate: Optiona
 
 
 def process_playlist(url: str, base_dir: Path, output_format: str, bitrate: Optional[int]) -> None:
-    ydl_opts = {
-        'quiet': True, 
-        'skip_download': True, 
-        'ignoreerrors': True, 
-        'extract_flat': True,
-        'js_runtimes': {'node': {}}
-    }
-    with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        if info is None:
-            print("Failed to retrieve playlist information.")
-            return
-        playlist_name = get_playlist_name(info)
-        entries = info.get('entries', [])
+    # 1. Ambil ID Playlist dari URL menggunakan Regex
+    match = re.search(r"list=([A-Za-z0-9_-]+)", url)
+    if not match:
+        print("[Gagal] URL Playlist tidak valid! Parameter 'list=' tidak ditemukan.")
+        return
+    playlist_id = match.group(1)
+
+    print("\n[Proses] Menghubungkan langsung ke server YouTube Music menggunakan ytmusicapi...")
+    try:
+        # Inisialisasi ytmusicapi untuk menarik data playlist asli
+        ytm = YTMusic()
+        playlist_data = ytm.get_playlist(playlistId=playlist_id, limit=None)
+    except Exception as e:
+        print(f"Gagal mengambil data playlist lewat ytmusicapi: {e}")
+        return
+
+    # Bersihkan nama playlist agar aman sebagai folder windows/linux
+    raw_playlist_title = playlist_data.get('title', 'playlist')
+    playlist_name = ''.join(c for c in raw_playlist_title if c not in r'<>:\"/\\|?*').strip()
+    tracks = playlist_data.get('tracks', [])
+
+    # 2. Rekonstruksi entries agar kompatibel dengan sisa kode bawaan kamu
+    entries = []
+    for track in tracks:
+        # Satukan daftar musisi jika lebih dari satu
+        artists = track.get('artists', [])
+        uploader = ", ".join([a.get('name', '') for a in artists if a.get('name')])
+        
+        entries.append({
+            'id': track.get('videoId'),
+            'title': track.get('title', 'Unknown Track'),
+            'uploader': uploader
+        })
 
     playlist_dir = base_dir / playlist_name
     ensure_download_dir(playlist_dir)
@@ -282,7 +308,6 @@ def process_playlist(url: str, base_dir: Path, output_format: str, bitrate: Opti
             continue
         
         video_id = entry.get('id')
-        
         raw_title = entry.get('title', 'Unknown Track')
         raw_uploader = entry.get('uploader', '')
         fallback_query = f"{raw_title} {raw_uploader}".strip()
@@ -291,11 +316,11 @@ def process_playlist(url: str, base_dir: Path, output_format: str, bitrate: Opti
             failed_songs.append(f"Track {index}: {fallback_query} (Tidak ada Video ID)")
             continue
             
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        # Menggunakan domain music.youtube.com dengan ID asli dari ytmusicapi
+        video_url = f"https://music.youtube.com/watch?v={video_id}"
         print(f"\n[{index}/{len(entries)}] Preparing track...")
         
         try:
-            # Mengirimkan track_index ke dalam process_entry untuk penomoran
             success = process_entry(video_url, playlist_dir, output_format, bitrate, fallback_query, track_index=index)
             if success:
                 success_count += 1
@@ -355,8 +380,6 @@ def main() -> None:
         process_playlist(url, downloads_root, output_format, bitrate)
     else:
         print("Detected single track. Starting download...")
-        # Jika track satuan, kita bisa kirimkan None atau langsung angka 1 agar tidak acak-acakan.
-        # Disini dibiarkan None agar track satuan tidak ada nomornya
         process_entry(url, downloads_root, output_format, bitrate)
 
     print("\nProcess finished! Check your 'downloads' folder.")
