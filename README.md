@@ -1,49 +1,118 @@
-# YouTube Music Downloader - Cara Pakai
+# YouTube Music Downloader
 
-## Instalasi
-1. **Python**: Pastikan Python 3.x terinstal di komputer Anda.
-2. **Librari**: Instal paket yang dibutuhkan:
-   ```bash
-   pip install yt-dlp mutagen pillow
-   ```
-3. **FFmpeg**: Pastikan FFmpeg terinstal dan tersedia di PATH sistem Anda.  
-   - Download: 
-   ```bash
-   winget install Gyan.FFmpeg
-   ```
-
-## Penggunaan
-1. **Jalankan Skrip**:
-   - Buka terminal atau CMD.
-   - Jalankan skrip: `python main.py`
-2. **Masukkan URL**:
-   - Masukkan URL YouTube Music (track atau playlist).
-3. **Pilih Kualitas**:
-   - Pilih opsi:
-     1. Kualitas asli (format asli)
-     2. MP3 320 kbps
-     3. MP3 192 kbps
-     4. MP3 128 kbps
-4. **Proses**:
-   - Skrip akan mendownload dan menyimpan file di folder `downloads/`.
-   - Jika ada file duplikat, skrip akan mengabaikan.
+Python script untuk mengunduh lagu atau playlist dari YouTube Music dengan dukungan metadata, cover art, dan konversi MP3 menggunakan FFmpeg.
 
 ## Fitur
-- **Download Playlist**: Mendownload semua lagu dalam playlist.
-- **Metadata**: Menyisipkan judul, artis, dan album ke file audio.
-- **Thumbnail**: Menggambarkan cover 1:1 (jika Pillow terinstal).
-- **Anti-Duplikat**: Mengabaikan file yang sudah ada.
-- **Laporan Gagal**: Menyimpan daftar lagu gagal di `gagal_download.txt`.
 
-## Catatan
-- Pastikan FFmpeg terinstal untuk konversi ke MP3.
-- Jika Pillow tidak terinstal, cover tidak akan di-crop 1:1.
-- File hasil disimpan di folder `downloads/`.
+- Download single track dan playlist YouTube Music
+- Download langsung dari playlist tanpa pencarian ulang
+- Metadata ID3 otomatis (Title, Artist, Album)
+- Embed cover art ke file MP3
+- Pilihan kualitas:
+  - Original
+  - MP3 320 kbps
+  - MP3 192 kbps
+  - MP3 128 kbps
+- Skip lagu yang sudah ada berdasarkan urutan playlist
+- Validasi cookies sebelum proses download
+- Otomatis menggunakan FFmpeg dari `static-ffmpeg` jika tersedia
 
-## Struktur Output
-- File audio: `downloads/[nama_artis] - [judul].mp3` (atau format asli).
-- Cover: `downloads/cover_[id_video].jpg` (jika ada).
+## Requirements
 
-## Lainnya
-- Skrip otomatis mengatur nama file dan menghindari konflik.
-- Jika ada masalah, cek file `gagal_download.txt` untuk detail.
+- Python 3.9 atau lebih baru
+
+Install dependency:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Dependencies
+
+- yt-dlp
+- ytmusicapi
+- mutagen
+- Pillow
+- static-ffmpeg
+
+## Struktur Proyek
+
+```
+.
+├── main.py
+├── requirements.txt
+├── cookies.txt          # Opsional
+└── downloads/
+```
+
+## Penggunaan
+
+Jalankan program:
+
+```bash
+python main.py
+```
+
+Program akan meminta:
+
+1. URL YouTube Music (lagu atau playlist)
+2. Pilihan kualitas output
+
+Hasil download akan disimpan di folder:
+
+```
+downloads/
+```
+
+## Cookies
+
+Secara default program akan memeriksa keberadaan `cookies.txt`. Jika file tidak ditemukan atau tidak valid, Anda dapat memilih untuk tetap melanjutkan tanpa cookies.
+
+### Menggunakan Cookies
+
+Keuntungan:
+
+- Mengurangi kemungkinan permintaan download dibatasi oleh YouTube.
+- Dapat mengakses konten yang memerlukan login.
+- Lebih stabil untuk proses download playlist berukuran besar.
+- Membantu mengurangi munculnya verifikasi seperti CAPTCHA atau permintaan login.
+
+Kekurangan:
+
+- Perlu memperbarui cookies jika sudah kedaluwarsa.
+- Jangan membagikan file `cookies.txt` karena berisi data sesi akun.
+
+### Tanpa Cookies
+
+Keuntungan:
+
+- Tidak memerlukan login atau file tambahan.
+- Lebih sederhana untuk penggunaan umum.
+
+Kekurangan:
+
+- Beberapa video mungkin tidak dapat diakses.
+- Lebih berisiko terkena pembatasan (rate limit) dari YouTube.
+- Pada kondisi tertentu YouTube dapat meminta verifikasi sehingga download gagal.
+
+## Output
+
+Untuk playlist, struktur hasil akan seperti berikut:
+
+```
+downloads/
+└── Nama Playlist/
+    ├── 01 - Artist - Title.mp3
+    ├── 02 - Artist - Title.mp3
+    └── ...
+```
+
+Jika ada lagu yang gagal diunduh, daftar akan disimpan pada:
+
+```
+downloads/gagal_download.txt
+```
+
+## License
+
+Project ini dibuat untuk penggunaan pribadi dan tujuan pembelajaran. Pastikan mematuhi ketentuan layanan YouTube dan hak cipta yang berlaku.
