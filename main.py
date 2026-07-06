@@ -14,6 +14,13 @@ import urllib.request
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+# === SOLUSI DEPENDENCY: Load FFmpeg langsung dari PIP ===
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()  # Otomatis mendaftarkan FFmpeg dari pip ke PATH skrip ini
+except ImportError:
+    pass
+
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import APIC, ID3
 from mutagen.id3 import error as ID3Error
@@ -125,10 +132,11 @@ def convert_to_mp3(input_file: Path, output_file: Path, bitrate: int) -> bool:
     """Fungsi mandiri untuk menangani konversi FFmpeg."""
     cmd = [
         'ffmpeg', '-y', '-i', str(input_file), '-vn',
-        '-ab', f'{bitrate}k', '-ar', '44100', '-loglevel', 'error', str(output_file)
+        '-ab', f'{bitrate}k', '-ar', '44100', '-loglevel', 'fatal', str(output_file)
     ]
     try:
-        subprocess.run(cmd, check=True)
+        # Menambahkan stdout dan stderr DEVNULL untuk membungkam total ocehan FFmpeg
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError as e:
         print(f"  [FFmpeg Error] Gagal konversi: {e}")
@@ -139,10 +147,12 @@ def convert_to_mp3(input_file: Path, output_file: Path, bitrate: int) -> bool:
 
 def get_base_ydl_opts() -> dict:
     """Menyediakan opsi dasar yt-dlp secara kondisional berdasarkan status validasi cookies."""
+    # === SOLUSI ERROR FORMAT: Paksa yt-dlp hanya mencari audio sejak tahap analisis info ===
     opts = {
         'quiet': True,
         'no_warnings': True,
-        'js_runtimes': {'node': {}},
+        'format': 'bestaudio/best',  # Mengunci pencarian hanya pada stream audio
+        'ignoreconfig': True,         # Mengabaikan config global sistem bawaan Windows
     }
     cookie_file = Path("cookies.txt")
     if USE_COOKIES and cookie_file.exists():
@@ -213,7 +223,23 @@ def process_entry(url: str, base_dir: Path, output_format: str, bitrate: Optiona
 
     raw_title = info.get('track') or info.get('title', 'Unknown Track')
     title = clean_track_title(raw_title)
-    artist = info.get('artist') or info.get('uploader') or 'Unknown Artist'
+    
+    # === SOLUSI NAMA FILE ARTIS DUPLIKAT ===
+    raw_artist = info.get('artist') or info.get('uploader') or 'Unknown Artist'
+    if isinstance(raw_artist, list):
+        raw_artist = ", ".join(raw_artist)
+        
+    seen_artists = set()
+    clean_artists = []
+    for a in raw_artist.split(','):
+        a_strip = a.strip()
+        # Filter agar nama artis yang sama tidak ditulis berulang
+        if a_strip.lower() not in seen_artists:
+            seen_artists.add(a_strip.lower())
+            clean_artists.append(a_strip)
+    artist = ", ".join(clean_artists)
+    # =======================================
+    
     album = info.get('album') or ''
     thumbnail_url = info.get('thumbnail')
     video_id = info.get('id', 'temp_id')
@@ -231,7 +257,6 @@ def process_entry(url: str, base_dir: Path, output_format: str, bitrate: Optiona
     dl_opts = get_base_ydl_opts()
     dl_opts.update({
         'quiet': False,
-        'format': 'bestaudio/best',
         'outtmpl': temp_template,
         'ignoreerrors': True
     })
@@ -379,8 +404,9 @@ def process_playlist(url: str, base_dir: Path, output_format: str, bitrate: Opti
 
 
 def main() -> None:
+    # Verifikasi FFmpeg otomatis (bisa mendeteksi bawaan sistem maupun dari pip static-ffmpeg)
     if not shutil.which('ffmpeg'):
-        print("Error: FFmpeg tidak terdeteksi pada sistem.")
+        print("Error: FFmpeg tidak terdeteksi pada sistem maupun Python environment.")
         sys.exit(1)
 
     check_cookies_validity()
