@@ -1,0 +1,5 @@
+yt-dlp
+ytmusicapi
+mutagen
+Pillow
+static-ffmpeg
